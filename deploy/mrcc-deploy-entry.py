@@ -107,8 +107,8 @@ with tempfile.TemporaryDirectory() as temporary:
     assert gerar_pdf(folder).read_bytes().startswith(b'%PDF-')
 '''
     run([python, '-c', smoke], cwd=release)
-    env = {**os.environ, 'NEXT_TELEMETRY_DISABLED': '1', 'NODE_ENV': 'development', 'CI': 'true'}
-    run(['nice', '-n', '10', '/usr/local/bin/npm', 'ci', '--no-audit', '--no-fund'], cwd=release / 'web', env=env)
+    env = {**os.environ, 'NEXT_TELEMETRY_DISABLED': '1', 'NODE_ENV': 'production', 'CI': 'true'}
+    run(['nice', '-n', '10', '/usr/local/bin/npm', 'ci', '--include=dev', '--no-audit', '--no-fund'], cwd=release / 'web', env=env)
     run(['nice', '-n', '10', '/usr/local/bin/npm', 'run', 'build'], cwd=release / 'web', env=env)
     (release / '.release.env').write_text(f'MRCC_DEPLOY_SHA={sha}\n')
     (release / '.ready').write_text(sha)
