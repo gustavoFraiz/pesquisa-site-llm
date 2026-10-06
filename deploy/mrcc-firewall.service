@@ -1,0 +1,10 @@
+[Unit]
+Description=Allow MRCC-PV web traffic
+After=network.target netfilter-persistent.service
+Before=nginx.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mrcc-firewall
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

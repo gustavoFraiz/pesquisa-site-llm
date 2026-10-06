@@ -1,0 +1,23 @@
+[Unit]
+Description=MRCC-PV interactive research application
+After=network.target ollama.service
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/mrcc-pv/web
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=PORT=3000
+Environment=MRCC_ROOT=/home/ubuntu/mrcc-pv
+Environment=MRCC_PYTHON=/home/ubuntu/mrcc-pv/.venv/bin/python
+Environment=MRCC_NUM_THREADS=2
+Environment=MRCC_MODEL=qwen3:4b
+Environment=MRCC_LLM_TIMEOUT=1200
+Environment=MRCC_SECURE_COOKIE=1
+ExecStart=/usr/local/bin/npm run start
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target
