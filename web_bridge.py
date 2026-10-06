@@ -131,11 +131,15 @@ def processar(entrada, pasta, modo):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("acao", choices=["seed", "importar", "analise", "llm"])
+    parser.add_argument("acao", choices=["seed", "importar", "analise", "llm", "pdf"])
     parser.add_argument("--entrada", type=Path)
     parser.add_argument("--saida", type=Path)
     args = parser.parse_args()
-    if args.acao in ("seed", "importar"):
+    if args.acao == 'pdf':
+        from relatorio_pdf import gerar_pdf
+        gerar_pdf(args.saida)
+        print(json.dumps({'sucesso': True, 'arquivo': 'relatorio.pdf'}))
+    elif args.acao in ("seed", "importar"):
         entrada = entrada_da_planilha(TEMPLATE if args.acao == "seed" else args.entrada)
         validar_entrada(entrada)
         print(json.dumps(entrada, ensure_ascii=False))

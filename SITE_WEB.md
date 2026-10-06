@@ -12,9 +12,11 @@ Endereço: **https://147.15.89.156**
 
 O rascunho é salvo automaticamente na sessão; aguarde a indicação de salvamento antes de fechar a página. O histórico permanece disponível naquele navegador durante a sessão de 30 dias. Limpar cookies perde o acesso. Exportações Excel, relatório e JSON são opcionais.
 
+**Baixar relatório (PDF)** produz um documento A4 com prioridades, propostas, salvaguardas, referências e páginas numeradas. O PDF é gerado a partir da análise salva no primeiro download e fica disponível também no histórico anterior à atualização, sem nova inferência. O acesso continua restrito à sessão que criou a análise. O Markdown permanece nos arquivos internos do motor.
+
 ## Instalação e serviços
 
-Código local: `web/`, `web_bridge.py`, `web_llm.py`, `recomendar.py` e `metodologia.py`.
+Código local: `web/`, `web_bridge.py`, `web_llm.py`, `relatorio_pdf.py`, `recomendar.py` e `metodologia.py`.
 Código na VM: `/home/ubuntu/mrcc-pv`.
 
 | Componente | Configuração na VM |
