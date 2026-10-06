@@ -4,6 +4,8 @@ Protótipo da etapa M4 da Matriz de Redesenho de Cargos e Competências para Peq
 
 Também disponível como site em **https://147.15.89.156**, com preenchimento direto, sessão anônima, histórico e inferência na própria VM. Consulte [SITE_WEB.md](SITE_WEB.md) para uso e manutenção; o código Next.js está em `web/`.
 
+Alterações entram por PR para a `main` protegida. Os testes e o build precisam passar; após o merge e a validação, o GitHub Actions publica automaticamente na Oracle. Consulte [DEPLOY_GITHUB.md](DEPLOY_GITHUB.md).
+
 Modelo inicial: **Qwen3 4B quantizado, via Ollama**. O pacote padrão tem cerca de 2,5 GB; memória de execução é maior e depende do contexto. A RTX 2070 de 8 GB e os 16 GB de RAM permitem testar essa configuração. Velocidade e qualidade precisam ser avaliadas neste computador. Não é necessário treinar o modelo para este protótipo.
 
 ## Executar no PowerShell
