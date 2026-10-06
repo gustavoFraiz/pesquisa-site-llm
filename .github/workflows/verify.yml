@@ -1,0 +1,54 @@
+name: Validar projeto
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verificar projeto
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: pip
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Instalar dependências Python
+        run: python -m pip install -r requirements.txt
+      - name: Verificar motor de análise
+        run: python -m unittest test_recomendar test_web_bridge test_deploy
+      - name: Verificar exportação PDF
+        run: |
+          python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          import web_bridge
+          from relatorio_pdf import gerar_pdf
+          with tempfile.TemporaryDirectory() as temporary:
+              folder = Path(temporary)
+              web_bridge.processar(web_bridge.entrada_da_planilha(web_bridge.TEMPLATE), folder, 'analise')
+              pdf = gerar_pdf(folder)
+              assert pdf.read_bytes().startswith(b'%PDF-')
+          PY
+      - name: Instalar dependências do site
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Verificar TypeScript e build
+        working-directory: web
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build

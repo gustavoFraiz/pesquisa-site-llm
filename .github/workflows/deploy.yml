@@ -1,0 +1,48 @@
+name: Publicar na Oracle
+
+on:
+  workflow_run:
+    workflows: [Validar projeto]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Atualizar VM
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://147.15.89.156
+    steps:
+      - name: Atualizar versão aprovada
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          ORACLE_KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_ssh_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$task_ssh_dir"' EXIT
+          chmod 700 "$task_ssh_dir"
+          printf '%s\n' "$ORACLE_SSH_KEY" > "$task_ssh_dir/key"
+          printf '%s\n' "$ORACLE_KNOWN_HOSTS" > "$task_ssh_dir/known_hosts"
+          chmod 600 "$task_ssh_dir/key" "$task_ssh_dir/known_hosts"
+          ssh -i "$task_ssh_dir/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$task_ssh_dir/known_hosts" \
+            -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 \
+            ubuntu@147.15.89.156 "deploy $DEPLOY_SHA"

@@ -19,7 +19,7 @@ O layout usa blocos por ação, quadro de responsável/prazo/custo, critério de
 ## Instalação e serviços
 
 Código local: `web/`, `web_bridge.py`, `web_llm.py`, `relatorio_pdf.py`, `recomendar.py` e `metodologia.py`.
-Código na VM: `/home/ubuntu/mrcc-pv`.
+Código ativo na VM: `/home/ubuntu/mrcc-deploy/current`. A instalação original em `/home/ubuntu/mrcc-pv` preserva o armazenamento das sessões e a versão inicial.
 
 | Componente | Configuração na VM |
 | --- | --- |
@@ -50,14 +50,7 @@ sudo journalctl -u ollama -n 80 --no-pager
 sudo systemctl list-timers mrcc-cert-renew.timer --no-pager
 ```
 
-Depois de alterar o site, transfira os arquivos modificados e, na VM:
-
-```bash
-cd /home/ubuntu/mrcc-pv/web
-NEXT_TELEMETRY_DISABLED=1 npm ci --no-audit --no-fund
-NEXT_TELEMETRY_DISABLED=1 npm run build
-sudo systemctl restart mrcc-pv
-```
+Depois de alterar o site, envie uma branch e abra um PR para `main`. Os checks precisam passar antes do merge; a VM é atualizada automaticamente após a validação da `main`. Consulte [DEPLOY_GITHUB.md](DEPLOY_GITHUB.md) para o fluxo e a manutenção do publicador.
 
 Aguarde terminar uma geração ativa antes de reiniciar. Preserve `web/data/` nas atualizações. Para copiar o SQLite com a aplicação rodando, use a API de backup do SQLite; copiar apenas o arquivo principal enquanto WAL está ativo pode perder alterações. Inclua também as subpastas de análises em seus backups. A chave SSH, cookies e dados privados não devem ser versionados.
 
