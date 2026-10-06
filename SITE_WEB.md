@@ -14,6 +14,8 @@ O rascunho é salvo automaticamente na sessão; aguarde a indicação de salvame
 
 **Baixar relatório (PDF)** produz um documento A4 com prioridades, propostas, salvaguardas, referências e páginas numeradas. O PDF é gerado a partir da análise salva no primeiro download e fica disponível também no histórico anterior à atualização, sem nova inferência. O acesso continua restrito à sessão que criou a análise. O Markdown permanece nos arquivos internos do motor.
 
+O layout usa blocos por ação, quadro de responsável/prazo/custo, critério de conclusão em destaque e tabela de salvaguardas. O cache interno é versionado (`relatorio-v2.pdf`), enquanto o download mantém o nome `relatorio.pdf`; assim, relatórios já baixados no layout anterior recebem a apresentação nova no próximo download.
+
 ## Instalação e serviços
 
 Código local: `web/`, `web_bridge.py`, `web_llm.py`, `relatorio_pdf.py`, `recomendar.py` e `metodologia.py`.

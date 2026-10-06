@@ -137,8 +137,8 @@ def main():
     args = parser.parse_args()
     if args.acao == 'pdf':
         from relatorio_pdf import gerar_pdf
-        gerar_pdf(args.saida)
-        print(json.dumps({'sucesso': True, 'arquivo': 'relatorio.pdf'}))
+        arquivo = gerar_pdf(args.saida)
+        print(json.dumps({'sucesso': True, 'arquivo': arquivo.name}))
     elif args.acao in ("seed", "importar"):
         entrada = entrada_da_planilha(TEMPLATE if args.acao == "seed" else args.entrada)
         validar_entrada(entrada)

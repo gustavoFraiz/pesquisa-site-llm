@@ -1,4 +1,4 @@
-"""PDF de leitura para o gestor, produzido a partir da análise já salva."""
+"""Relatório gerencial em PDF, sem nova inferência."""
 import json
 import os
 import tempfile
@@ -7,134 +7,152 @@ from html import escape
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import BaseDocTemplate, Frame, KeepTogether, PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle
+
+ARQUIVO_PDF = 'relatorio-v2.pdf'
 
 
 def gerar_pdf(pasta: Path):
     resultado = json.loads((pasta / 'analise.json').read_text(encoding='utf-8'))
     dados, plano, meta = resultado['diagnostico'], resultado.get('plano'), resultado['metadados']
-    azul, verde = colors.HexColor('#172e4c'), colors.HexColor('#18765d')
-    estilos = getSampleStyleSheet()
-    estilos.add(ParagraphStyle('TituloMRCC', fontName='Helvetica-Bold', fontSize=22, leading=27, textColor=azul, spaceAfter=12))
-    estilos.add(ParagraphStyle('SecaoMRCC', fontName='Helvetica-Bold', fontSize=14, leading=18, textColor=verde, spaceBefore=17, spaceAfter=9, keepWithNext=True))
-    estilos.add(ParagraphStyle('ItemMRCC', fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=azul, spaceBefore=10, spaceAfter=6, keepWithNext=True))
-    estilos.add(ParagraphStyle('TextoMRCC', fontName='Helvetica', fontSize=10, leading=15, textColor=azul, spaceAfter=7, alignment=TA_LEFT))
-    estilos.add(ParagraphStyle('TabelaMRCC', parent=estilos['TextoMRCC'], fontSize=9, leading=12, spaceAfter=0))
-    historia = []
+    azul, verde, cinza = (colors.HexColor(c) for c in ('#172e4c', '#18765d', '#647184'))
+    claro, linha = colors.HexColor('#f3f6fa'), colors.HexColor('#dde4ec')
+    largura = A4[0] - 40 * mm
+    base = ParagraphStyle('texto', fontName='Helvetica', fontSize=9, leading=13, textColor=azul, spaceAfter=5)
+    estilos = {'texto': base}
+    for nome, opcoes in {
+        'marca': dict(fontName='Helvetica-Bold', fontSize=8, leading=11, textColor=verde, spaceAfter=5),
+        'titulo': dict(fontName='Helvetica-Bold', fontSize=21, leading=25, spaceAfter=9),
+        'secao': dict(fontName='Helvetica-Bold', fontSize=13, leading=18, spaceBefore=14, spaceAfter=8, keepWithNext=True),
+        'item': dict(fontName='Helvetica-Bold', fontSize=11, leading=15, spaceAfter=5, keepWithNext=True),
+        'acao': dict(fontName='Helvetica-Bold', fontSize=10, leading=15, spaceAfter=7),
+        'muted': dict(fontSize=8.5, leading=12, textColor=cinza),
+        'fonte': dict(fontSize=7.5, leading=10, textColor=cinza, spaceAfter=0),
+        'celula': dict(fontSize=8.5, leading=12, spaceAfter=0),
+        'centro': dict(fontSize=8.5, leading=12, spaceAfter=0, alignment=TA_CENTER),
+        'cabecalho': dict(fontName='Helvetica-Bold', fontSize=8, leading=12, spaceAfter=0, textColor=colors.white),
+    }.items():
+        estilos[nome] = ParagraphStyle(nome, parent=base, **opcoes)
 
     def texto(valor):
         return escape(str(valor) if valor is not None and str(valor).strip() else 'Não informado').replace('\n', '<br/>')
 
-    def paragrafo(valor, estilo='TextoMRCC'):
-        historia.append(Paragraph(texto(valor), estilos[estilo]))
+    def p(valor, estilo='texto'):
+        return Paragraph(texto(valor), estilos[estilo])
 
-    def campo(label, valor):
-        historia.append(Paragraph(f'<b>{texto(label)}:</b> {texto(valor)}', estilos['TextoMRCC']))
+    def rotulo(label, valor, estilo='texto'):
+        return Paragraph(f'<b>{texto(label)}</b><br/>{texto(valor)}', estilos[estilo])
 
-    paragrafo('MRCC-PV', 'TituloMRCC')
-    paragrafo('Análise e recomendações para o gestor', 'ItemMRCC')
-    funcoes = list(dict.fromkeys(c['funcao'] for c in dados['competencias']))
-    campo('Função', '; '.join(funcoes))
+    def tabela(linhas, larguras, fundo=claro, cabecalho=False):
+        t = Table(linhas, colWidths=larguras, repeatRows=1 if cabecalho else 0, hAlign='LEFT')
+        comandos = [('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 10), ('TOPPADDING', (0, 0), (-1, -1), 8), ('BOTTOMPADDING', (0, 0), (-1, -1), 8)]
+        if cabecalho:
+            comandos.extend([('BACKGROUND', (0, 0), (-1, 0), azul), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, claro]), ('LINEBELOW', (0, 0), (-1, -1), .3, linha)])
+        else:
+            comandos.append(('BACKGROUND', (0, 0), (-1, -1), fundo))
+        t.setStyle(TableStyle(comandos))
+        return t
+
+    def painel(conteudo, fundo=claro):
+        return tabela([[conteudo]], [largura], fundo)
+
     criado = meta.get('gerado_em_utc')
     if criado:
         try:
-            criado = datetime.fromisoformat(criado.replace('Z', '+00:00')).astimezone(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y às %H:%M (Brasília)')
+            criado = datetime.fromisoformat(criado.replace('Z', '+00:00')).astimezone(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y · %H:%M (Brasília)')
         except ValueError:
             pass
-    campo('Análise criada em', criado)
-    campo('Situação', dados['status_ciclo'])
-    paragrafo('Propostas para revisão. A decisão final, os prazos e a avaliação do desenvolvimento cabem ao gestor e ao ocupante da função.')
+    funcoes = list(dict.fromkeys(c['funcao'] for c in dados['competencias']))
+    historia = [p('MRCC-PV  /  RELATÓRIO GERENCIAL', 'marca'), p('Plano de desenvolvimento', 'titulo')]
+    informacoes = Table([[rotulo('FUNÇÃO ANALISADA', '; '.join(funcoes)), rotulo('DATA DA ANÁLISE', criado, 'muted')]], colWidths=[largura * .63, largura * .37], hAlign='LEFT')
+    informacoes.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 10), ('BOTTOMPADDING', (0, 0), (-1, -1), 12)]))
+    historia.extend([informacoes, painel([Paragraph(f'<b>Revisão do gestor pendente.</b> {texto(dados["status_ciclo"])}', estilos['muted'])]), Spacer(1, 2 * mm)])
 
-    paragrafo('1. Competências e prioridades', 'SecaoMRCC')
-    paragrafo('N0: não exposto; N1: uso assistido; N2: uso autônomo; N3: uso crítico. A lacuna compara nível atual e nível-alvo; o score também considera frequência e criticidade da tarefa.')
-    linhas = [['Competência', 'Atual / alvo', 'Lacuna', 'Score', 'Prioridade']]
+    historia.append(p('01  Competências e prioridades', 'secao'))
+    linhas = [[p(v, 'cabecalho') for v in ['Competência', 'Atual / alvo', 'Lacuna', 'Score', 'Prioridade']]]
     for c in sorted(dados['competencias'], key=lambda c: -c['score']):
-        linhas.append([c['competencia'], f'N{c["atual_num"]} / N{c["alvo_num"]}', c['lacuna'], c['score'], c['prioridade']])
-    tabela = Table([[Paragraph(texto(v), estilos['TabelaMRCC']) for v in linha] for linha in linhas],
-                   colWidths=[80 * mm, 28 * mm, 19 * mm, 18 * mm, 29 * mm], repeatRows=1, hAlign='LEFT')
-    tabela.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d8f4e8')),
-                               ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f6fa')]),
-                               ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LEFTPADDING', (0, 0), (-1, -1), 7),
-                               ('RIGHTPADDING', (0, 0), (-1, -1), 7), ('TOPPADDING', (0, 0), (-1, -1), 8),
-                               ('BOTTOMPADDING', (0, 0), (-1, -1), 8)]))
-    historia.append(tabela)
+        prioridade = Paragraph(f'<font color="{"#a35d27" if c["prioridade"] == "Alta" else "#172e4c"}">{texto(c["prioridade"])}</font>', estilos['centro'])
+        linhas.append([p(c['competencia'], 'celula'), p(f'N{c["atual_num"]} / N{c["alvo_num"]}', 'centro'), p(c['lacuna'], 'centro'), p(c['score'], 'centro'), prioridade])
+    historia.extend([tabela(linhas, [largura * f for f in (.46, .16, .10, .10, .18)], cabecalho=True), Spacer(1, 3 * mm),
+                     p('N0 · Não exposto    N1 · Assistido    N2 · Autônomo    N3 · Crítico', 'muted'), p('O score combina a lacuna com a frequência e a criticidade da tarefa.', 'fonte')])
 
-    paragrafo('2. Propostas de ações', 'SecaoMRCC')
+    historia.append(p('02  Ações propostas', 'secao'))
     competencias = {c['id']: c for c in dados['competencias']}
     catalogo = {a['id']: a for a in dados['catalogo']}
-    if plano:
-        paragrafo(plano['resumo'])
-        if not plano['recomendacoes']:
-            paragrafo('Não há lacunas positivas nesta rodada. Revise as salvaguardas e acompanhe o trabalho.')
-        for i, p in enumerate(plano['recomendacoes'], 1):
-            c = competencias[p['competencia_id']]
-            paragrafo(f'{i}. {c["competencia"]}', 'ItemMRCC')
-            campo('Tarefa', c['tarefa'])
-            campo('Prioridade', c['prioridade'])
-            a = catalogo.get(p['acao_id'])
-            if p['decisao'] == 'recomendada' and a:
-                campo('Ação proposta', a['acao'])
-                campo('Recurso', a['recurso'])
-                campo('Custo informado no catálogo', a['custo'])
-                paragrafo('O custo do catálogo não inclui o tempo de trabalho da equipe.')
-                campo('Responsável sugerido', p['responsavel_sugerido'])
-                campo('Prazo sugerido', f'{p["prazo_dias_sugerido"]} dias')
-                campo('Como observar a conclusão', p['criterio_conclusao'])
+    if plano and plano['recomendacoes']:
+        historia.append(p('Propostas para revisão. O custo do catálogo não inclui o tempo de trabalho da equipe.', 'muted'))
+        for i, proposta in enumerate(plano['recomendacoes'], 1):
+            c, a = competencias[proposta['competencia_id']], catalogo.get(proposta['acao_id'])
+            bloco = [Spacer(1, 3 * mm), p(f'AÇÃO {i:02d}  ·  PRIORIDADE {c["prioridade"].upper()}', 'marca'), p(c['competencia'], 'item'), p(f'Tarefa: {c["tarefa"]}', 'muted')]
+            if proposta['decisao'] == 'recomendada' and a:
+                bloco.extend([p(a['acao'], 'acao'), p(proposta['justificativa'])])
+                fatos = tabela([[rotulo('RESPONSÁVEL SUGERIDO', proposta['responsavel_sugerido'], 'celula'), rotulo('PRAZO SUGERIDO', f'{proposta["prazo_dias_sugerido"]} dias', 'celula'), rotulo('CUSTO NO CATÁLOGO', a['custo'], 'celula')]], [largura / 3] * 3)
+                bloco.extend([fatos, Spacer(1, 2 * mm), Paragraph(f'<b>Recurso:</b> {texto(a["recurso"])}', estilos['muted']), painel([p('COMO OBSERVAR A CONCLUSÃO', 'marca'), p(proposta['criterio_conclusao'])], colors.HexColor('#edf6f2'))])
             else:
-                campo('Decisão pendente', {'sem_acao_adequada': 'Nenhuma ação adequada disponível no catálogo', 'dados_insuficientes': 'Informações insuficientes'}.get(p['decisao'], p['decisao']))
-            campo('Justificativa', p['justificativa'])
-            campo('Orientação ao gestor', p['orientacao_ao_gestor'])
-            campo('Fontes', '; '.join([c['fonte'], c['contexto_tarefa']['fonte']] + ([a['fonte']] if a else [])))
-            historia.append(Spacer(1, 4 * mm))
+                decisao = {'sem_acao_adequada': 'Nenhuma ação adequada disponível no catálogo', 'dados_insuficientes': 'Informações insuficientes'}.get(proposta['decisao'], proposta['decisao'])
+                bloco.extend([p(decisao, 'acao'), p(proposta['justificativa'])])
+            bloco.extend([Spacer(1, 2 * mm), Paragraph(f'<b>Orientação ao gestor:</b> {texto(proposta["orientacao_ao_gestor"])}', estilos['muted']), p('Fontes: ' + '; '.join([c['fonte'], c['contexto_tarefa']['fonte']] + ([a['fonte']] if a else [])), 'fonte'), Spacer(1, 3 * mm)])
+            historia.append(KeepTogether(bloco))
+    elif plano:
+        historia.append(p('Não há lacunas positivas nesta rodada. Revise as salvaguardas e acompanhe o trabalho.'))
     else:
-        paragrafo('Este relatório contém somente o diagnóstico. As recomendações ainda não foram geradas.')
+        historia.append(p('Este relatório contém somente o diagnóstico. As recomendações ainda não foram geradas.'))
 
-    paragrafo('3. Salvaguardas e ajustes do trabalho', 'SecaoMRCC')
+    if plano and plano['recomendacoes']:
+        historia.append(PageBreak())
+    historia.append(p('03  Salvaguardas e ajustes', 'secao'))
+    salvaguardas = [[p('Âncora / resposta', 'cabecalho'), p('Observações e ajustes registrados', 'cabecalho')]]
     for s in dados['salvaguardas']:
-        paragrafo(s['ancora'], 'ItemMRCC')
-        campo('Resposta', s['resposta'])
-        campo('Observação', s['observacao'])
-        campo('Ajuste registrado', s['ajuste'] or 'Não registrado')
-        campo('Fonte', s['fonte'])
-    paragrafo(dados['validacao_bilateral'])
+        identificacao = [rotulo(s['ancora'], s['resposta'] or 'Não informada', 'celula'), Spacer(1, 2), p(s['fonte'], 'fonte')]
+        conteudo = []
+        if s['observacao']:
+            conteudo.append(p(s['observacao'], 'celula'))
+        if s['ajuste']:
+            conteudo.extend([Spacer(1, 2 * mm), rotulo('Ajuste registrado', s['ajuste'], 'celula')])
+        elif s['resposta'] != 'Sim':
+            conteudo.append(p('Ajuste não registrado.', 'muted'))
+        salvaguardas.append([identificacao, conteudo or [p('Sem observação registrada.', 'muted')]])
+    quadro_salvaguardas = tabela(salvaguardas, [largura * .32, largura * .68], cabecalho=True)
+    quadro_salvaguardas.setStyle(TableStyle([('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
+    historia.extend([quadro_salvaguardas, Spacer(1, 3 * mm), p(dados['validacao_bilateral'], 'muted')])
     if dados.get('pendencias'):
-        paragrafo('Pendências para revisão', 'ItemMRCC')
-        for pendencia in dados['pendencias']:
-            paragrafo(pendencia)
+        historia.append(p('Pendências para revisão', 'item'))
+        historia.extend(p(v) for v in dados['pendencias'])
 
-    paragrafo('4. Referências e limites', 'SecaoMRCC')
-    paragrafo('A validação automática confere estrutura, competências e catálogo. A adequação pedagógica, os critérios de conclusão e a validação bilateral continuam sujeitos à avaliação humana.')
+    historia.extend([p('04  Referências e limites', 'secao'), p('A validação automática confere estrutura, competências e catálogo. A adequação pedagógica, os critérios e a validação bilateral continuam sujeitos à avaliação humana.', 'muted')])
     if meta.get('origem_criterios'):
-        campo('Origem dos critérios', meta['origem_criterios'])
+        historia.append(Paragraph(f'<b>Origem dos critérios:</b> {texto(meta["origem_criterios"])}', estilos['muted']))
     if meta.get('modelo'):
-        campo('Modelo utilizado', meta['modelo'])
+        historia.append(p(f'Modelo utilizado: {meta["modelo"]}', 'muted'))
     for trecho in dados.get('metodologia', {}).get('trechos', []):
-        campo(trecho['referencia'], trecho['texto'])
-    for limite in dados.get('metodologia', {}).get('limites', []):
-        paragrafo(limite)
+        historia.append(Paragraph(f'<b>{texto(trecho["referencia"])}:</b> {texto(trecho["texto"])}', estilos['muted']))
+    historia.extend(p(v, 'muted') for v in dados.get('metodologia', {}).get('limites', []))
 
     def rodape(canvas, doc):
         canvas.saveState()
-        canvas.setStrokeColor(verde)
-        canvas.line(18 * mm, 16 * mm, A4[0] - 18 * mm, 16 * mm)
-        canvas.setFont('Helvetica', 8)
-        canvas.setFillColor(azul)
-        canvas.drawString(18 * mm, 11 * mm, 'MRCC-PV | Propostas para revisão do gestor')
-        canvas.drawRightString(A4[0] - 18 * mm, 11 * mm, f'Página {doc.page}')
+        canvas.setStrokeColor(linha)
+        canvas.setLineWidth(.5)
+        canvas.line(20 * mm, 17 * mm, A4[0] - 20 * mm, 17 * mm)
+        canvas.setFont('Helvetica', 7.5)
+        canvas.setFillColor(cinza)
+        canvas.drawString(20 * mm, 12 * mm, 'MRCC-PV  |  Relatório gerencial · Revisão pendente')
+        canvas.drawRightString(A4[0] - 20 * mm, 12 * mm, f'{doc.page:02d}')
         canvas.restoreState()
 
     fd, nome = tempfile.mkstemp(prefix='.relatorio-', suffix='.pdf', dir=pasta)
     os.close(fd)
     temporario = Path(nome)
     try:
-        documento = SimpleDocTemplate(str(temporario), pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm,
-                                     topMargin=18 * mm, bottomMargin=23 * mm, title='Análise e recomendações MRCC-PV', author='MRCC-PV')
-        documento.build(historia, onFirstPage=rodape, onLaterPages=rodape)
-        destino = pasta / 'relatorio.pdf'
+        documento = BaseDocTemplate(str(temporario), pagesize=A4, rightMargin=20 * mm, leftMargin=20 * mm, topMargin=20 * mm, bottomMargin=25 * mm, title='Plano de desenvolvimento MRCC-PV', author='MRCC-PV')
+        quadro = Frame(documento.leftMargin, documento.bottomMargin, documento.width, documento.height, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+        documento.addPageTemplates(PageTemplate(id='relatorio', frames=[quadro], onPage=rodape))
+        documento.build(historia)
+        destino = pasta / ARQUIVO_PDF
         temporario.replace(destino)
         return destino
     finally:
