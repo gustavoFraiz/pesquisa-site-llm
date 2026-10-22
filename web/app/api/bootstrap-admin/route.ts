@@ -5,7 +5,7 @@ import { HttpErro, errorResponse, lerJson, sameOrigin } from '@/lib/http';
 
 export const runtime = 'nodejs';
 
-const TOKEN_HASH = 'daf627cc7f3d85722bca92323bfe7f341a01d26168d8a8bedefbf6b07d1b37e8';
+const TOKEN_HASH = '072d1843d6e6ee043a6b8d41e82c9ad05020424998f263c51d299d78c16ae3ce';
 
 function tokenValido(token: unknown): boolean {
   if (typeof token !== 'string') return false;
