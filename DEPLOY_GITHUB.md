@@ -40,6 +40,34 @@ Após reiniciar o serviço, o publicador confere site, modelo disponível e SHA 
 
 As versões anteriores ficam disponíveis para inspeção e reversão; acompanhe o espaço em disco antes de acumular muitas publicações. Nenhuma atualização substitui ou exporta o banco de sessões.
 
+## Contas: passos manuais na primeira publicação
+
+A versão com login cria as tabelas novas sozinha na inicialização. Três passos são feitos uma única vez, por SSH administrativo:
+
+1. **Criar o admin** (dentro do código ativo):
+
+   ```bash
+   cd /home/ubuntu/mrcc-deploy/current/web
+   node scripts/criar-admin.mjs email-do-admin@exemplo.com
+   ```
+
+   O script pede a senha duas vezes, sem mostrá-la. Rodar de novo com o mesmo e-mail redefine a senha do admin.
+
+2. **Aplicar o Nginx** de `deploy/nginx.conf` (limite de login e rota nova de geração):
+
+   ```bash
+   sudo cp /home/ubuntu/mrcc-deploy/current/deploy/nginx.conf /etc/nginx/sites-available/mrcc-pv
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   Confira antes o nome do arquivo de site em uso com `ls /etc/nginx/sites-enabled/`.
+
+3. **Conferir** `https://147.15.89.156/login` e entrar como admin.
+
+4. **Atualizar o publicador** (fase 3): reinstale `deploy/mrcc-deploy-entry.py` em `/usr/local/bin/mrcc-deploy-entry` (dono root), para o deploy esperar também as extrações em andamento (`extrair`) e rodar `test_web_extracao`. Depois, valide a extração com a LLM real: `cd /home/ubuntu/mrcc-deploy/current && .venv/bin/python validar_extracao.py`.
+
+Se houver rollback para a versão anterior ao login, o modo anônimo volta temporariamente; as tabelas novas ficam intactas e são usadas de novo na próxima publicação.
+
 ## Credencial de publicação
 
 O ambiente GitHub **production** permite apenas a branch `main`. Os secrets `ORACLE_SSH_KEY` e `ORACLE_KNOWN_HOSTS` guardam uma chave exclusiva para publicação e a identidade SSH já verificada da VM.

@@ -53,7 +53,7 @@ def wait_idle():
     deadline = time.monotonic() + 1200
     time.sleep(2)
     while True:
-        active = subprocess.run(['pgrep', '-f', r'[w]eb_bridge.py (analise|llm)'], capture_output=True)
+        active = subprocess.run(['pgrep', '-f', r'[w]eb_bridge.py (analise|llm|extrair)'], capture_output=True)
         if active.returncode == 1:
             return
         if active.returncode != 0:
@@ -96,7 +96,7 @@ def build(sha):
     run(['/usr/bin/python3', '-m', 'venv', str(release / '.venv')])
     python = str(release / '.venv/bin/python')
     run(['nice', '-n', '10', python, '-m', 'pip', 'install', '-r', 'requirements.txt'], cwd=release)
-    run([python, '-m', 'unittest', 'test_recomendar', 'test_web_bridge', 'test_deploy'], cwd=release)
+    run([python, '-m', 'unittest', 'test_recomendar', 'test_web_bridge', 'test_web_extracao', 'test_deploy'], cwd=release)
     smoke = '''import tempfile
 from pathlib import Path
 import web_bridge

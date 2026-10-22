@@ -1,19 +1,37 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { dataDir, runBridge, errorResponse, sameOrigin } from '@/lib/server';
-import { getSession } from '@/lib/session';
+import { db, transacao } from '@/lib/db';
+import { estruturaDaEntrada } from '@/lib/entrada-motor';
+import { criarFuncao } from '@/lib/funcoes';
+import { errorResponse, HttpErro, sameOrigin } from '@/lib/http';
+import { criarOcupante } from '@/lib/ocupantes';
+import { dataDir, runBridge } from '@/lib/server';
+import { exigirGestor } from '@/lib/sessao-web';
+
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
-  let filePath: string | undefined;
+  let caminho: string | undefined;
   try {
     sameOrigin(request);
-    await getSession();
-    const file = (await request.formData()).get('file');
-    if (!(file instanceof File) || !file.name.toLowerCase().endsWith('.xlsx') || file.size > 2_000_000) throw new Error('Envie uma planilha .xlsx de até 2 MB.');
+    const gestor = await exigirGestor();
+    const arquivo = (await request.formData()).get('file');
+    if (!(arquivo instanceof File) || !arquivo.name.toLowerCase().endsWith('.xlsx') || arquivo.size > 2_000_000) throw new HttpErro(400, 'Envie uma planilha .xlsx de até 2 MB.');
     await mkdir(dataDir, { recursive: true, mode: 0o700 });
-    filePath = path.join(dataDir, `upload-${randomUUID()}.xlsx`);
-    await writeFile(filePath, new Uint8Array(await file.arrayBuffer()));
-    return Response.json(JSON.parse(await runBridge(['importar', '--entrada', filePath])));
-  } catch (e) { return errorResponse(e); }
-  finally { if (filePath) await unlink(filePath).catch(() => {}); }
+    caminho = path.join(dataDir, `upload-${randomUUID()}.xlsx`);
+    await writeFile(caminho, new Uint8Array(await arquivo.arrayBuffer()));
+    const { nome, estrutura, niveis } = estruturaDaEntrada(JSON.parse(await runBridge(['importar', '--entrada', caminho])) as Record<string, unknown>);
+    const banco = db();
+    const funcaoId = transacao(banco, () => {
+      const id = criarFuncao(banco, gestor.empresaId, { nome, estrutura, origem: 'planilha' });
+      criarOcupante(banco, gestor.empresaId, id, { apelido: 'Ocupante 1', niveis });
+      return id;
+    });
+    return Response.json({ funcaoId }, { status: 201 });
+  } catch (e) {
+    return errorResponse(e);
+  } finally {
+    if (caminho) await unlink(caminho).catch(() => undefined);
+  }
 }

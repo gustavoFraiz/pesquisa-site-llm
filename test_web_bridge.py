@@ -16,6 +16,35 @@ class TestBridge(unittest.TestCase):
         warnings.filterwarnings('ignore', message='Data Validation extension is not supported')
         cls.entrada = b.entrada_da_planilha(b.TEMPLATE)
 
+    def test_catalogo_aceita_ate_40_acoes(self):
+        entrada = copy.deepcopy(self.entrada)
+        entrada['catalogo'] = [{'eixo': 'Geral', 'acao': f'Ação {i}', 'recurso': 'Interno', 'custo': 'R$ 0'} for i in range(40)]
+        b.validar_entrada(entrada)
+        entrada['catalogo'].append({'eixo': 'Geral', 'acao': 'Ação 40', 'recurso': 'Interno', 'custo': 'R$ 0'})
+        with self.assertRaisesRegex(ValueError, 'catalogo'):
+            b.validar_entrada(entrada)
+
+    def test_seletor_limita_candidatas_priorizando_o_eixo(self):
+        entrada = copy.deepcopy(self.entrada)
+        entrada['catalogo'] = ([{'eixo': 'Geral', 'acao': f'Ação geral {i}', 'recurso': 'Interno', 'custo': 'R$ 0'} for i in range(20)]
+                               + [{'eixo': 'Letramento em IA', 'acao': f'Ação de letramento {i}', 'recurso': 'Interno', 'custo': 'R$ 0'} for i in range(3)])
+        with tempfile.TemporaryDirectory() as tmp:
+            dados = b.processar(entrada, Path(tmp), 'analise')['diagnostico']
+        dados['parametros_gestor'] = {'prazo_dias_proposto': 14}
+        contexto, mapa = web_llm.contexto(dados)
+        letramento = next(c for c in contexto['competencias'] if c['competencia'] == 'Letramento em IA')
+        self.assertEqual(len(letramento['acoes']), web_llm.MAX_CANDIDATAS)
+        self.assertEqual([a['acao'] for a in letramento['acoes'][:3]], [f'Ação de letramento {i}' for i in range(3)])
+        self.assertEqual([a['acao'] for a in mapa[letramento['id']]], [a['acao'] for a in letramento['acoes']])
+
+    def test_catalogo_cheio_com_textos_longos_nao_bloqueia_o_diagnostico(self):
+        entrada = copy.deepcopy(self.entrada)
+        eixos = ['Geral', 'Letramento em IA', 'Proficiência técnica', 'Relacionais e de julgamento']
+        entrada['catalogo'] = [{'eixo': eixos[i % 4], 'acao': (f'Ação {i} ' + 'x' * 300)[:300], 'recurso': 'Prática assistida', 'custo': 'R$ 0'} for i in range(40)]
+        with tempfile.TemporaryDirectory() as tmp:
+            resultado = b.processar(entrada, Path(tmp), 'analise')
+        self.assertEqual(len(resultado['diagnostico']['catalogo']), 40)
+
     def test_roundtrip_e_m3_atualizado(self):
         entrada = copy.deepcopy(self.entrada)
         entrada['competencias'][0]['atual'] = 'N2 - Usuário autônomo'

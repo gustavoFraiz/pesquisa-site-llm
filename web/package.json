@@ -6,10 +6,11 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start -H 127.0.0.1",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/**/*.test.ts\""
   },
   "dependencies": {
-    "next": "16.3.8",
+    "next": "16.4.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

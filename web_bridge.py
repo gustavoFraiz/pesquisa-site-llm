@@ -11,6 +11,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 import recomendar as r
+import web_extracao
 import web_llm
 
 ROOT = Path(__file__).parent
@@ -44,7 +45,7 @@ def validar_entrada(entrada):
     prazo = entrada.get('prazo_dias_proposto', 14)
     if type(prazo) is not int or not 1 <= prazo <= 180:
         raise ValueError('Informe um prazo inicial inteiro entre 1 e 180 dias.')
-    limites = {"tarefas": 12, "competencias": 8, "catalogo": 16, "salvaguardas": 6, "trilha": 12}
+    limites = {"tarefas": 12, "competencias": 8, "catalogo": 40, "salvaguardas": 6, "trilha": 12}
     for nome, (_, campos) in CAMPOS.items():
         linhas = entrada.get(nome, [])
         if not isinstance(linhas, list) or len(linhas) > limites[nome]:
@@ -109,8 +110,9 @@ def processar(entrada, pasta, modo):
     dados["usar_trilha_contexto"] = False
     dados["prompt_compacto"] = True
     dados['parametros_gestor'] = {'prazo_dias_proposto': entrada.get('prazo_dias_proposto', 14)}
-    if len(json.dumps(r.mensagens(dados), ensure_ascii=False)) > 28000:
-        raise ValueError("O formulário está extenso demais. Reduza o número de competências ou o tamanho das descrições.")
+    # Mede o que a web realmente envia à LLM (o seletor curto de web_llm), não o prompt completo da CLI.
+    if len(json.dumps(web_llm.mensagens(dados), ensure_ascii=False)) > 28000:
+        raise ValueError("O formulário está extenso demais. Reduza o número de competências, o tamanho das descrições ou as ações próprias da loja.")
     meta = {"versao": r.VERSAO, "modo": modo, "origem": "formulario_web",
             "gerado_em_utc": datetime.now(timezone.utc).isoformat(), "modelo": r.MODELO if modo == "llm" else None,
             "versao_prompt": web_llm.VERSAO, "trilha_manual_enviada_a_llm": False,
@@ -131,7 +133,7 @@ def processar(entrada, pasta, modo):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("acao", choices=["seed", "importar", "analise", "llm", "pdf"])
+    parser.add_argument("acao", choices=["seed", "importar", "analise", "llm", "pdf", "extrair"])
     parser.add_argument("--entrada", type=Path)
     parser.add_argument("--saida", type=Path)
     args = parser.parse_args()
@@ -139,6 +141,9 @@ def main():
         from relatorio_pdf import gerar_pdf
         arquivo = gerar_pdf(args.saida)
         print(json.dumps({'sucesso': True, 'arquivo': arquivo.name}))
+    elif args.acao == 'extrair':
+        resultado = web_extracao.gerar(json.loads(args.entrada.read_text(encoding='utf-8')), r.MODELO, args.saida)
+        print(json.dumps({'sucesso': True, 'tarefas': len(resultado['tarefas'])}))
     elif args.acao in ("seed", "importar"):
         entrada = entrada_da_planilha(TEMPLATE if args.acao == "seed" else args.entrada)
         validar_entrada(entrada)

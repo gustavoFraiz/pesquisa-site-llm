@@ -1,12 +1,21 @@
 # Interface MRCC-PV
 
-Aplicação Next.js que usa o motor Python na pasta superior. Preenchimento direto de M1, M2 e Salvaguarda, cálculo determinístico de M3 e propostas de M4 por Qwen/Ollama. A VM e o projeto local usam `qwen3:4b`. Importar ou baixar Excel é opcional.
+Aplicação Next.js que usa o motor Python na pasta superior. O admin (equipe da pesquisa) cadastra empresas; o gestor de cada empresa cadastra funções (M1, M2 e Salvaguarda) e ocupantes, e gera a trilha (M4) de cada ocupante. O cálculo das lacunas (M3) é determinístico; as propostas usam Qwen/Ollama na própria VM.
 
-## Sessões sem login
+## Contas e dados
 
-Não existem usuários, senhas ou cadastro. Um cookie aleatório `HttpOnly`, `Secure` na VM e `SameSite=Lax` identifica cada navegador por 30 dias. No SQLite fica somente o hash do token, o rascunho e a associação das análises à sessão. Consultas e downloads conferem essa associação. Limpar cookies ou usar outro navegador cria um espaço separado; não há recuperação de uma sessão perdida.
+- Login obrigatório. Um gestor por empresa; a senha temporária criada pelo admin é trocada no primeiro acesso. O primeiro admin é criado por SSH com `node scripts/criar-admin.mjs <email>`.
+- Senhas com `scrypt` (N=2¹⁷). Sessão em cookie `mrcc_auth` (`HttpOnly`, `SameSite=Lax`, `Secure` com `MRCC_SECURE_COOKIE=1`), 14 dias; o banco guarda só o hash do token. Cinco senhas erradas bloqueiam a conta por 15 minutos.
+- Toda consulta do gestor é filtrada pela empresa da sessão; recurso de outra empresa responde 404. O admin só lê os dados das empresas.
+- SQLite (`node:sqlite`, WAL) em `web/data/sessions.sqlite`, com tabelas só aditivas: o rollback do deploy volta o código sem quebrar o banco. Cada execução guarda entradas, diagnóstico, propostas e evidências em `web/data/<id>/`.
+- Salvamento automático com controle de versão: se a página estiver desatualizada (voltar pelo navegador, outra aba), o servidor recusa a gravação (409) e pede para recarregar.
 
-O SQLite usa WAL e não precisa de outro serviço. Dados ficam em `web/data/`, fora do diretório público. Cada execução mantém entradas, diagnóstico, propostas e evidências em uma subpasta privada. Os dados do formulário são enviados à própria VM; a inferência acontece ali, sem serviço externo de LLM.
+## Agilidade para o gestor
+
+- Modelos de cargo prontos (mantidos pelo admin), cópia de função e importação da planilha.
+- Competências sugeridas a partir das tarefas (RF05) e perda de centralidade (RF07), em `lib/regras.ts`.
+- Nível atual por três perguntas de sim/não (Quadro 4 do PBL3), em `lib/niveis.ts`.
+- Ferramentas de IA da loja como sugestão nas tarefas; ações próprias da loja no catálogo.
 
 ## Desenvolvimento
 
@@ -14,10 +23,11 @@ Na raiz, instale as dependências Python em `.venv` e disponibilize Ollama com `
 
 ```powershell
 npm ci
+npm test        # módulos de lib/ com node:test (type stripping do Node 24)
 npm run dev
 ```
 
-Node 24 LTS é a versão utilizada na VM. `node:sqlite` é nativo; não há dependências compiladas para banco/autenticação. O desenvolvimento local usa cookie sem `Secure`; produção define `MRCC_SECURE_COOKIE=1` e usa HTTPS.
+Node 24 LTS é a versão usada na VM. Os módulos de `lib/` importam uns aos outros com extensão `.ts` (exigência do `node --test`); páginas e componentes usam `@/lib/...`.
 
 ## Configuração
 
@@ -26,19 +36,16 @@ Node 24 LTS é a versão utilizada na VM. `node:sqlite` é nativo; não há depe
 | `MRCC_ROOT` | Diretório do motor Python e dos documentos originais |
 | `MRCC_PYTHON` | Executável da `.venv` |
 | `MRCC_NUM_THREADS` | Threads de inferência; 2 na VM |
-| `MRCC_MODEL` | Modelo Ollama; `qwen3:4b` na VM, `qwen3:4b` por padrão local |
+| `MRCC_MODEL` | Modelo Ollama; `qwen3:4b` |
 | `MRCC_LLM_TIMEOUT` | Tempo por tentativa; 1200 segundos na VM |
 | `MRCC_SECURE_COOKIE` | `1` em produção com HTTPS |
 | `PORT` | 3000, acessível somente em 127.0.0.1 |
 
-Há uma execução por vez e até uma repetição por saída inválida. A interface acompanha o processamento em segundo plano. Reinícios interrompem a geração ativa e permitem uma nova tentativa. A escolha final, o prazo, o critério de conclusão e as salvaguardas precisam de revisão humana.
+As gerações com LLM entram numa fila em memória: uma por vez na VM, uma por loja, até seis aguardando. A página mostra a posição. Reinícios interrompem a geração ativa; a página mostra "interrompida por reinício" e permite tentar de novo. A escolha final, o prazo, o critério de conclusão e as salvaguardas precisam de revisão humana.
 
-O seletor em `../web_llm.py` recebe tarefas, níveis, ações candidatas e ajustes do trabalho; devolve somente o índice da ação e uma justificativa curta. O código associa esse índice ao ID do catálogo e monta critérios por tarefa/nível-alvo, responsável Gestor, prazo informado pelo usuário e orientações de revisão. O diagnóstico completo e o PBL4 ficam preservados nos arquivos, sem enviar todos os trechos ao seletor. A validação rejeita índices fora do catálogo, troca de competências e promessas de garantia de resultado. Isso não substitui a rubrica humana nem confirma as âncoras completas do PBL3.
+O seletor em `../web_llm.py` recebe tarefas, níveis, ações candidatas e ajustes do trabalho; devolve só o índice da ação e uma justificativa curta. O código monta o restante. Isso não substitui a rubrica humana nem confirma as âncoras completas do PBL3.
 
 ## Verificação
 
-`npm run build` verifica TypeScript e gera a aplicação. `test-browser.cjs` testa o site publicado pelo Chrome instalado neste Windows: edição, persistência, exportação, isolamento entre sessões, bloqueio de origem externa, celular e geração real. Esse teste consome uma rodada de inferência; execute somente quando necessário. Capturas e resultados ficam em `test-results/`, ignorado pelo Git.
-
-O script aceita `MRCC_TEST_URL` para outra instância. As ferramentas WebMCP são registradas somente quando o navegador oferece `document.modelContext`; essa API opcional não é necessária para usar o site.
-
-Para conferir a repetição do mesmo exemplo, salve o resultado de `test-browser.cjs` como `test-results/llm-primeira-4b.json` e execute `node test-repeat.cjs`. Ele cria outra sessão, gera com as mesmas entradas e compara competências, decisões e ações. Isso mede estabilidade nesse caso; não valida a eficácia científica das recomendações.
+- `npm test` e `npm run build` (o CI roda os dois).
+- `test-browser.cjs` percorre o fluxo do gestor no Chrome instalado: login, nova função, tarefa, competência, ocupante, perguntas de nível, diagnóstico, voltar pelo navegador e recarregar. Uso: `MRCC_TEST_EMAIL=… MRCC_TEST_SENHA=… node test-browser.cjs` (o gestor precisa já ter trocado a senha temporária). Aceita `MRCC_TEST_URL` para outra instância. Não consome inferência.

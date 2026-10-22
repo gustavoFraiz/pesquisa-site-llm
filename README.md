@@ -2,7 +2,7 @@
 
 Protótipo da etapa M4 da Matriz de Redesenho de Cargos e Competências para Pequenos Varejistas. Lê as respostas da planilha, calcula lacunas e usa uma LLM local para propor ações de desenvolvimento ao gestor.
 
-Também disponível como site em **https://147.15.89.156**, com preenchimento direto, sessão anônima, histórico e inferência na própria VM. Consulte [SITE_WEB.md](SITE_WEB.md) para uso e manutenção; o código Next.js está em `web/`.
+Também disponível como site em **https://147.15.89.156**, com login por empresa (criado pela equipe da pesquisa), funções e ocupantes, histórico e inferência na própria VM. Consulte [SITE_WEB.md](SITE_WEB.md) para uso e manutenção; o código Next.js está em `web/`.
 
 Alterações entram por PR para a `main` protegida. Os testes e o build precisam passar; após o merge e a validação, o GitHub Actions publica automaticamente na Oracle. Consulte [DEPLOY_GITHUB.md](DEPLOY_GITHUB.md).
 

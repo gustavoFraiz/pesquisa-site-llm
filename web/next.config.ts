@@ -1,3 +1,4 @@
 import type { NextConfig } from 'next';
-const config: NextConfig = { poweredByHeader: false, experimental: { cpus: 1 } };
+// O site não usa next/image; desligar o otimizador remove o endpoint /_next/image.
+const config: NextConfig = { poweredByHeader: false, images: { unoptimized: true }, experimental: { cpus: 1 } };
 export default config;

@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 import recomendar as r
 
 VERSAO = 'selecao-web-v2'
+# Ações candidatas por competência no prompt: as do eixo primeiro, depois as gerais. O catálogo da
+# loja pode chegar a 40 ações; sem limite, o contexto passaria de 8192 tokens na VM de 2 núcleos.
+MAX_CANDIDATAS = 8
 
 
 class Escolha(BaseModel):
@@ -27,7 +30,8 @@ def contexto(dados):
     entradas = []
     mapa = {}
     for c in dados['priorizadas']:
-        candidatas = [catalogo[i] for i in c['acoes_permitidas']]
+        permitidas = [catalogo[i] for i in c['acoes_permitidas']]
+        candidatas = ([a for a in permitidas if a['eixo'] != 'Geral'] + [a for a in permitidas if a['eixo'] == 'Geral'])[:MAX_CANDIDATAS]
         mapa[c['id']] = candidatas
         if not candidatas:
             continue
@@ -105,7 +109,7 @@ def gerar(dados, modelo, pasta):
     necessario = len(json.dumps(msgs, ensure_ascii=False).encode('utf-8')) // 2 + tokens_max + 128
     num_ctx = next((n for n in (3072, 4096, 8192) if n >= necessario), None)
     if not num_ctx:
-        raise ValueError('O contexto está extenso demais. Reduza as descrições ou a quantidade de competências.')
+        raise ValueError('O contexto está extenso demais. Reduza as descrições, a quantidade de competências ou as ações próprias da loja.')
     identificacao = {}
     for endpoint, chave in (('version', 'versao_ollama'), ('tags', 'digest_modelo')):
         try:

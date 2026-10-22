@@ -4,15 +4,25 @@ Endereço: **https://147.15.89.156**
 
 ## Uso
 
-1. Abra o site. Uma sessão anônima é criada automaticamente.
-2. Preencha a função, suas tarefas e os efeitos da IA. Para experimentar com os dados da pesquisa, use **Carregar exemplo preenchido**.
-3. Informe competências, tarefa associada, nível atual e nível-alvo.
-4. Registre as respostas e ajustes de Salvaguarda.
-5. Abra **Trilha de ações** e clique em **Gerar recomendações**. Revise as propostas na própria página.
+O acesso exige login. A equipe da pesquisa (admin) cadastra cada empresa com o e-mail do gestor e entrega a senha temporária, que é trocada no primeiro acesso.
 
-O rascunho é salvo automaticamente na sessão; aguarde a indicação de salvamento antes de fechar a página. O histórico permanece disponível naquele navegador durante a sessão de 30 dias. Limpar cookies perde o acesso. Exportações Excel, relatório e JSON são opcionais.
+1. **Admin** (`/admin`): cadastra empresas, gera nova senha temporária e desativa ou reativa o acesso.
+2. **Gestor** (`/`): vê as funções da loja e cria uma nova a partir de um **modelo pronto**, copiando outra função da loja, em branco, importando a planilha MRCC-PV ou **descrevendo a função com as próprias palavras** (a IA sugere as tarefas para revisão; leva de 1 a 2 minutos e entra na mesma fila das trilhas). No primeiro acesso, informa as **ferramentas de IA** da loja (também em `/ferramentas`); elas aparecem como sugestão nas tarefas.
+3. Em cada função, preenche Tarefas (botões e linguagem simples; sem ferramenta, o efeito vira "Não mudou"), Competências e Salvaguarda. A etapa Competências **sugere competências a partir das tarefas** (RF05), com o motivo de cada uma, e lista o que **deixa de ser central** (RF07). O salvamento é automático.
+4. Na etapa Ocupantes, adiciona cada pessoa por apelido, sem dados pessoais. Na página do ocupante, responde **três perguntas de sim/não** por competência (Quadro 4 do PBL3) ou escolhe o nível diretamente; dá para copiar os níveis de outro ocupante.
+5. Clica em **Gerar recomendações**. Os pedidos entram em uma fila (uma geração por vez na VM, uma por loja). A página mostra a posição e o resultado.
 
-**Baixar relatório (PDF)** produz um documento A4 com prioridades, propostas, salvaguardas, referências e páginas numeradas. O PDF é gerado a partir da análise salva no primeiro download e fica disponível também no histórico anterior à atualização, sem nova inferência. O acesso continua restrito à sessão que criou a análise. O Markdown permanece nos arquivos internos do motor.
+O histórico de análises fica em cada ocupante. **Baixar relatório (PDF)** produz o documento A4 a partir da análise salva, sem nova inferência. Os downloads só são liberados para a empresa dona da análise (e para o admin).
+
+O tempo ativo de preenchimento de cada função e de cada ocupante é registrado para o indicador de RNF01 (até 90 minutos por função).
+
+O admin mantém os **modelos de cargo** (`/admin/modelos`, inclusive promovendo a função de uma loja a modelo) e o **catálogo da pesquisa** (`/admin/catalogo`). Cada loja pode incluir ações próprias em `/acoes`; o motor recebe as ativas do catálogo e da loja (até 40), sem repetições. O conteúdo dos modelos Operador(a) de caixa, Vendedor(a), Estoquista/Repositor e Atendimento online é proposta da equipe e deve ser revisado pelo grupo.
+
+**Síntese da função (RF12):** em cada função, "Ver síntese da função" mostra numa página o mapa de efeitos, as competências, a salvaguarda e as lacunas de cada ocupante, com o PDF da última trilha.
+
+**Pesquisa (admin):** `/admin/metricas` traz, por função, tempo ativo de preenchimento (meta de 90 min do RNF01), cobertura do diagnóstico, densidade de lacunas, completude da trilha, diretriz de uso crítico, alerta de preservação, facilidade percebida (nota de 1 a 5 pedida ao gestor depois da primeira trilha) e o efeito dos recursos de agilidade (origem das tarefas e competências e quanto foi editado). "Baixar CSV" abre direto no Excel. Em `/admin`, o nome da loja leva à leitura das funções dela, inclusive arquivadas.
+
+As análises anônimas feitas antes do login continuam no banco e nas pastas de `web/data/`, mas não aparecem mais no site.
 
 O layout usa blocos por ação, quadro de responsável/prazo/custo, critério de conclusão em destaque e tabela de salvaguardas. O cache interno é versionado (`relatorio-v2.pdf`), enquanto o download mantém o nome `relatorio.pdf`; assim, relatórios já baixados no layout anterior recebem a apresentação nova no próximo download.
 

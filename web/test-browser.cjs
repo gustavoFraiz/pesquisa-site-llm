@@ -1,102 +1,71 @@
+// Roteiro de ponta a ponta do gestor. Uso (dentro de web/, com o site rodando):
+//   MRCC_TEST_EMAIL=gestor@local.test MRCC_TEST_SENHA=gestor-local-123 node test-browser.cjs
+// O gestor precisa já ter trocado a senha temporária. Para outro endereço, defina MRCC_TEST_URL.
 const { chromium, expect } = require('@playwright/test');
 const fs = require('node:fs');
 
 (async () => {
-  const base = process.env.MRCC_TEST_URL || 'https://147.15.89.156';
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1050 }, baseURL: base });
+  const base = process.env.MRCC_TEST_URL || 'http://localhost:3000';
+  const email = process.env.MRCC_TEST_EMAIL;
+  const senha = process.env.MRCC_TEST_SENHA;
+  if (!email || !senha) throw new Error('Defina MRCC_TEST_EMAIL e MRCC_TEST_SENHA (gestor com senha já trocada).');
+  const browser = await chromium.launch({ executablePath: process.env.MRCC_CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const context = await browser.newContext({ baseURL: base, viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
-  await page.addInitScript(() => {
-    window.__mrccTools = {};
-    Object.defineProperty(document, 'modelContext', { configurable: true, value: { registerTool(tool, options) {
-      window.__mrccTools[tool.name] = tool;
-      options.signal.addEventListener('abort', () => { delete window.__mrccTools[tool.name]; });
-    } } });
-  });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByLabel('Função analisada')).toBeVisible({ timeout: 45000 });
-  await expect(page.getByLabel('Função analisada')).toHaveValue('');
-  const cookie = (await context.cookies()).find(c => c.name === 'mrcc_session');
-  if (!cookie?.httpOnly || !cookie.secure || cookie.sameSite !== 'Lax') throw new Error('Cookie de sessão sem proteção.');
-  const toolData = await page.evaluate(() => window.__mrccTools.read_mrcc_diagnosis.execute({}));
-  if (!Array.isArray(toolData.lacunas) || toolData.etapa !== 'Tarefas') throw new Error('Ferramenta opcional de diagnóstico indisponível.');
-  await page.getByRole('button', { name: 'Carregar exemplo preenchido' }).click();
-  await expect(page.getByLabel('Função analisada')).not.toHaveValue('');
-  const role = await page.getByLabel('Função analisada').inputValue();
-  await page.getByLabel('Função analisada').fill(`${role} (validação web)`);
-  await expect(page.getByText('Rascunho salvo na sua sessão.', { exact: true })).toBeVisible();
-  await page.reload({ waitUntil: 'networkidle' });
-  await expect(page.getByLabel('Função analisada')).toHaveValue(`${role} (validação web)`);
-  fs.mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
-  await page.locator('nav button').nth(1).click();
-  await expect(page.getByRole('heading', { name: 'Encontre as lacunas.' })).toBeVisible();
-  await page.locator('nav button').nth(2).click();
-  await expect(page.getByRole('heading', { name: 'Preserve a qualidade.' })).toBeVisible();
-  await page.locator('nav button').nth(3).click();
+
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('E-mail').fill(email);
+  await page.getByLabel('Senha', { exact: true }).fill(senha);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(page.getByRole('heading', { name: 'Funções da loja' })).toBeVisible();
+  const cookie = (await context.cookies()).find(c => c.name === 'mrcc_auth');
+  if (!cookie?.httpOnly || cookie.sameSite !== 'Lax') throw new Error('Cookie de sessão sem proteção.');
+
+  await page.getByRole('link', { name: '+ Nova função' }).click();
+  const nome = `Validação web ${Date.now()}`;
+  await page.locator('form', { hasText: 'Em branco' }).getByLabel('Nome da função').fill(nome);
+  await page.getByRole('button', { name: 'Começar em branco' }).click();
+  await expect(page.getByRole('heading', { name: 'Entenda o trabalho.' })).toBeVisible();
+  await page.getByLabel('Tarefa', { exact: true }).fill('Montar orçamento para o cliente');
+  await page.getByRole('radio', { name: 'A IA ajuda (P)' }).click();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await page.getByRole('button', { name: '+ Adicionar competência' }).click();
+  await page.getByLabel('Competência', { exact: true }).fill('Proficiência na ferramenta de orçamento');
+  await page.getByRole('button', { name: /Ocupantes/ }).click();
+  await expect(page.getByText('Alterações salvas.')).toBeVisible();
+  await page.getByLabel('Apelido do ocupante').fill('Atendente 1');
+  await page.getByRole('button', { name: 'Adicionar ocupante' }).click();
+  await expect(page.getByRole('heading', { name: 'Atendente 1' })).toBeVisible();
+  await page.getByRole('radiogroup', { name: 'Usa a ferramenta nesta tarefa?' }).getByRole('radio', { name: 'Sim' }).click();
+  await page.getByRole('radiogroup', { name: /Usa sem instruções prontas/ }).getByRole('radio', { name: 'Não' }).click();
+  await expect(page.getByText('N1 - Usuário assistido —')).toBeVisible();
+  // Corrigir uma resposta mantém as anteriores e mostra a pergunta seguinte.
+  await page.getByRole('radiogroup', { name: /Usa sem instruções prontas/ }).getByRole('radio', { name: 'Sim' }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Usa a ferramenta nesta tarefa?' }).getByRole('radio', { name: 'Sim' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radiogroup', { name: /Percebe erros da ferramenta/ }).getByRole('radio', { name: 'Não' }).click();
+  await expect(page.getByText('N2 - Usuário autônomo —')).toBeVisible();
   await page.getByRole('button', { name: 'Conferir diagnóstico sem gerar a trilha' }).click();
   await expect(page.getByRole('link', { name: 'Baixar planilha' })).toBeVisible({ timeout: 60000 });
-  const session = await (await context.request.get('/api/session')).json();
-  const jobId = session.currentJob;
-  if (!jobId) throw new Error('Análise não foi salva na sessão.');
-  const record = await (await context.request.get(`/api/jobs/${jobId}`)).json();
-  if (record.status !== 'done' || record.result.plano !== null) throw new Error('Diagnóstico inconsistente.');
-  const download = await context.request.get(`/api/jobs/${jobId}/download?type=input`);
-  if (!download.ok() || (await download.body()).length < 1000) throw new Error('Exportação falhou.');
-  const stranger = await browser.newContext({ baseURL: base });
-  await stranger.request.get('/api/session');
-  if ((await stranger.request.get(`/api/jobs/${jobId}`)).status() !== 404) throw new Error('Outra sessão acessou o resultado.');
-  if ((await stranger.request.get(`/api/jobs/${jobId}/download?type=input`)).status() !== 404) throw new Error('Outra sessão baixou o resultado.');
-  const csrf = await context.request.put('/api/session', { headers: { Origin: 'https://example.invalid' }, data: { input: record.input } });
-  if (csrf.ok()) throw new Error('Origem externa aceita.');
-  await stranger.close();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('nav button').nth(0).click();
-  await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
-  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Interface transborda no celular.');
-  await page.setViewportSize({ width: 1440, height: 1050 });
-  await page.locator('nav button').nth(3).click();
-  if (process.env.MRCC_TEST_SKIP_LLM === '1') {
-    const noGap = { ...record.input, competencias: record.input.competencias.map(c => ({ ...c, alvo: c.atual })) };
-    const response = await context.request.post('/api/jobs', { data: { input: noGap, mode: 'llm' } });
-    if (response.status() !== 202) throw new Error('Cenário sem lacunas não iniciou.');
-    const emptyJob = await response.json();
-    let empty;
-    for (let i = 0; i < 15; i++) {
-      await page.waitForTimeout(1000);
-      empty = await (await context.request.get(`/api/jobs/${emptyJob.id}`)).json();
-      if (empty.status !== 'running') break;
-    }
-    if (empty.status !== 'done' || empty.result.plano.recomendacoes.length !== 0) throw new Error('Cenário sem lacunas gerou recomendações indevidas.');
-    await page.reload({ waitUntil: 'networkidle' });
-    await expect(page.getByText('Não há lacunas positivas nesta rodada. Revise as salvaguardas e acompanhe o trabalho.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Nova análise', exact: true }).click();
-    await expect(page.getByLabel('Função analisada')).toHaveValue('');
-    if (errors.length) throw new Error(`Erros do navegador: ${errors.join('; ')}`);
-    console.log('Interface, sessões, diagnóstico, exportação, celular, ausência de lacunas e ferramentas opcionais passaram. Inferência não repetida.');
-    await browser.close(); return;
-  }
-  await expect(page.getByRole('button', { name: 'Gerar recomendações', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Gerar recomendações', exact: true }).click();
-  await expect(page.getByText('Preparando sua trilha', { exact: true })).toBeVisible();
-  console.log('Interface, salvamento, diagnóstico, exportação, celular e isolamento de sessões passaram. LLM iniciada.');
-  const start = Date.now();
-  let final;
-  while (Date.now() - start < 2500000) {
-    await page.waitForTimeout(15000);
-    const state = await (await context.request.get('/api/session')).json();
-    final = await (await context.request.get(`/api/jobs/${state.currentJob}`)).json();
-    if (final.status !== 'running') break;
-    if (Math.round((Date.now() - start) / 15000) % 4 === 0) console.log(`LLM: ${Math.round((Date.now() - start) / 1000)} segundos.`);
-  }
-  if (final?.status !== 'done' || !final.result?.plano) throw new Error(`LLM falhou: ${JSON.stringify({status: final?.status, error: final?.error})}`);
-  if (final.result.plano.recomendacoes.some(p => p.decisao !== 'recomendada')) throw new Error('A LLM se absteve no exemplo preenchido, que possui ações adequadas no catálogo.');
-  await expect(page.getByText('Proposta · revisão pendente', { exact: true })).toBeVisible({ timeout: 10000 });
-  await page.screenshot({ path: 'test-results/recommendations.png', fullPage: true });
-  fs.writeFileSync('test-results/llm-result.json', JSON.stringify(final, null, 2));
-  if (errors.length) throw new Error(`Erros do navegador: ${errors.join('; ')}`);
-  console.log(JSON.stringify({ success: true, recommendations: final.result.plano.recomendacoes.length, seconds: final.result.metadados.tempo_segundos, jobId: final.id }));
+  fs.mkdirSync('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/ocupante.png', fullPage: true });
+
+  // Voltar do navegador não pode mostrar (nem regravar) a versão antiga da função.
+  await page.goBack();
+  await expect(page.getByLabel('Tarefa', { exact: true })).toHaveValue('Montar orçamento para o cliente', { timeout: 15000 });
+  await page.goForward();
+  await expect(page.getByRole('heading', { name: 'Atendente 1' })).toBeVisible();
+  // Recarregar a página do ocupante mostra a última geração.
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Baixar planilha' })).toBeVisible({ timeout: 30000 });
+
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: new RegExp(nome) })).toBeVisible();
+  await page.getByRole('button', { name: 'Sair' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  if (errors.length) throw new Error(errors.join('\n'));
+  console.log('Fluxo do gestor verificado.');
   await browser.close();
 })().catch(e => { console.error(e); process.exit(1); });
