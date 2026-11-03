@@ -3,21 +3,33 @@ import type { Criticidade, Efeito, Eixo, Estrutura, Frequencia, Nivel, Niveis, R
 import { transacao } from './db.ts';
 
 const ID = (n: number): string => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const DIA_MS = 86_400_000;
+const momento = (dia: number, hora: string): number => dia * DIA_MS + Date.parse(`1970-01-01T${hora}:00.000Z`);
+const DURACAO_DIAS = 21;
+
+/** Primeiro dia da base: `AAAA-MM-DD` informado ou em MRCC_SEED_DATA; sem nenhum dos dois, a base termina hoje. */
+export function inicioDaBase(data = process.env.MRCC_SEED_DATA, agora = Date.now()): number {
+  if (!data) return Math.floor(agora / DIA_MS - DURACAO_DIAS) * DIA_MS;
+  const inicio = Date.parse(`${data}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || Number.isNaN(inicio)) throw new Error('MRCC_SEED_DATA precisa estar no formato AAAA-MM-DD.');
+  return inicio;
+}
+
 const SENHA_HASH = 'scrypt$131072$8$1$TCrWtLubRw9UcQk0XhnDiA==$aWRuLrj8AISl4E9LOXuRQdnUWhU6SKMTeQMjSz+kfG0=';
 
 const empresas = [
-  { id: 1001, nome: 'Materiais Nova Aurora', cidade: 'Curitiba', segmento: 'Material de construção', email: 'gestao@materiaisnovaaurora.com.br', criada: '2026-10-08T13:20:00.000Z', acesso: '2026-10-28T18:42:00.000Z' },
-  { id: 1002, nome: 'Empório Cedro Azul', cidade: 'São José dos Pinhais', segmento: 'Mercado e conveniência', email: 'gerencia@emporiocedroazul.com.br', criada: '2026-10-09T16:10:00.000Z', acesso: '2026-10-27T20:15:00.000Z' },
-  { id: 1003, nome: 'Ótica Vale Claro', cidade: 'Curitiba', segmento: 'Ótica e acessórios', email: 'contato@oticavaleclaro.com.br', criada: '2026-10-10T14:05:00.000Z', acesso: '2026-10-29T12:06:00.000Z' },
-  { id: 1004, nome: 'Auto Peças Rota Sete', cidade: 'Pinhais', segmento: 'Autopeças', email: 'administracao@rotaseteautopecas.com.br', criada: '2026-10-11T17:30:00.000Z', acesso: '2026-10-26T19:54:00.000Z' },
-  { id: 1005, nome: 'Casa Pet Ipê Roxo', cidade: 'Colombo', segmento: 'Pet shop', email: 'gestao@casapetiperoxo.com.br', criada: '2026-10-13T15:40:00.000Z', acesso: '2026-10-28T15:18:00.000Z' },
+  { id: 1001, nome: 'Materiais Nova Aurora', cidade: 'Curitiba', segmento: 'Material de construção', email: 'gestao@materiaisnovaaurora.com.br', criada: momento(0, '13:20'), acesso: momento(20, '18:42') },
+  { id: 1002, nome: 'Empório Cedro Azul', cidade: 'São José dos Pinhais', segmento: 'Mercado e conveniência', email: 'gerencia@emporiocedroazul.com.br', criada: momento(1, '16:10'), acesso: momento(19, '20:15') },
+  { id: 1003, nome: 'Ótica Vale Claro', cidade: 'Curitiba', segmento: 'Ótica e acessórios', email: 'contato@oticavaleclaro.com.br', criada: momento(2, '14:05'), acesso: momento(21, '12:06') },
+  { id: 1004, nome: 'Auto Peças Rota Sete', cidade: 'Pinhais', segmento: 'Autopeças', email: 'administracao@rotaseteautopecas.com.br', criada: momento(3, '17:30'), acesso: momento(18, '19:54') },
+  { id: 1005, nome: 'Casa Pet Ipê Roxo', cidade: 'Colombo', segmento: 'Pet shop', email: 'gestao@casapetiperoxo.com.br', criada: momento(5, '15:40'), acesso: momento(20, '15:18') },
 ] as const;
 
 type TarefaSeed = { texto: string; frequencia: Frequencia; criticidade: Criticidade; ferramenta: string; efeito: Efeito; origem?: 'manual' | 'ia' | 'planilha'; editada?: boolean };
 type CompetenciaSeed = { texto: string; eixo: Eixo; tarefa: number; alvo: Nivel; origem?: 'manual' | 'regra' | 'planilha'; editada?: boolean };
 
 type FuncaoSeed = {
-  id: number; empresa: number; nome: string; origem: string; criada: string; tempo: number; nota: number; comentario: string;
+  id: number; empresa: number; nome: string; origem: string; criada: number; tempo: number; nota: number; comentario: string;
   tarefas: TarefaSeed[]; competencias: CompetenciaSeed[]; perdas?: { tarefa: number; descricao: string }[]; salvaguardas: Resposta[];
   ocupantes: { id: number; apelido: string; tempo: number; prazo: number; niveis: Nivel[]; trilhas: number }[];
 };
@@ -54,7 +66,7 @@ function montarEstrutura(f: FuncaoSeed): Estrutura {
 
 const funcoes: FuncaoSeed[] = [
   {
-    id: 2001, empresa: 1001, nome: 'Vendedor de balcão', origem: 'planilha', criada: '2026-10-09T13:40:00.000Z', tempo: 2480, nota: 5,
+    id: 2001, empresa: 1001, nome: 'Vendedor de balcão', origem: 'planilha', criada: momento(1, '13:40'), tempo: 2480, nota: 5,
     comentario: 'O preenchimento ficou simples depois que as tarefas foram organizadas por frequência.',
     tarefas: [
       { texto: 'Consultar preço, estoque e prazo de entrega', frequencia: 'Diária', criticidade: 'Média', ferramenta: 'ERP da loja e assistente de consulta', efeito: 'A', origem: 'planilha' },
@@ -76,7 +88,7 @@ const funcoes: FuncaoSeed[] = [
     ],
   },
   {
-    id: 2002, empresa: 1001, nome: 'Assistente de orçamentos', origem: 'texto', criada: '2026-10-12T14:18:00.000Z', tempo: 1960, nota: 4,
+    id: 2002, empresa: 1001, nome: 'Assistente de orçamentos', origem: 'texto', criada: momento(4, '14:18'), tempo: 1960, nota: 4,
     comentario: 'A descrição por texto acelerou o cadastro e exigiu poucos ajustes.',
     tarefas: [
       { texto: 'Receber lista de materiais enviada pelo vendedor', frequencia: 'Diária', criticidade: 'Média', ferramenta: 'Sistema interno', efeito: 'I', origem: 'ia', editada: true },
@@ -94,7 +106,7 @@ const funcoes: FuncaoSeed[] = [
     ocupantes: [{ id: 3003, apelido: 'Marcos', tempo: 850, prazo: 14, niveis: ['N1', 'N2', 'N2'], trilhas: 2 }],
   },
   {
-    id: 2003, empresa: 1002, nome: 'Operador de loja', origem: 'manual', criada: '2026-10-10T16:35:00.000Z', tempo: 3210, nota: 4,
+    id: 2003, empresa: 1002, nome: 'Operador de loja', origem: 'manual', criada: momento(2, '16:35'), tempo: 3210, nota: 4,
     comentario: 'As perguntas ajudaram a separar o que é rotina do que exige decisão do atendente.',
     tarefas: [
       { texto: 'Atender clientes no caixa e no salão', frequencia: 'Diária', criticidade: 'Alta', ferramenta: 'PDV', efeito: 'I' },
@@ -114,7 +126,7 @@ const funcoes: FuncaoSeed[] = [
     ],
   },
   {
-    id: 2004, empresa: 1002, nome: 'Responsável por compras', origem: 'manual', criada: '2026-10-15T18:10:00.000Z', tempo: 2760, nota: 5,
+    id: 2004, empresa: 1002, nome: 'Responsável por compras', origem: 'manual', criada: momento(7, '18:10'), tempo: 2760, nota: 5,
     comentario: 'A visão por competência deixou claro onde o comprador precisa conferir a recomendação automática.',
     tarefas: [
       { texto: 'Analisar giro e necessidade de reposição', frequencia: 'Diária', criticidade: 'Alta', ferramenta: 'Relatório de vendas', efeito: 'P' },
@@ -131,7 +143,7 @@ const funcoes: FuncaoSeed[] = [
     ocupantes: [{ id: 3006, apelido: 'Patrícia', tempo: 970, prazo: 21, niveis: ['N2', 'N2', 'N3'], trilhas: 2 }],
   },
   {
-    id: 2005, empresa: 1003, nome: 'Consultor de atendimento', origem: 'texto', criada: '2026-10-11T14:50:00.000Z', tempo: 2140, nota: 5,
+    id: 2005, empresa: 1003, nome: 'Consultor de atendimento', origem: 'texto', criada: momento(3, '14:50'), tempo: 2140, nota: 5,
     comentario: 'Foi fácil representar a diferença entre recomendação técnica e decisão de atendimento.',
     tarefas: [
       { texto: 'Entender necessidade e preferência do cliente', frequencia: 'Diária', criticidade: 'Alta', ferramenta: '', efeito: 'N', origem: 'manual' },
@@ -152,7 +164,7 @@ const funcoes: FuncaoSeed[] = [
     ],
   },
   {
-    id: 2006, empresa: 1004, nome: 'Balconista técnico', origem: 'planilha', criada: '2026-10-12T17:20:00.000Z', tempo: 3450, nota: 4,
+    id: 2006, empresa: 1004, nome: 'Balconista técnico', origem: 'planilha', criada: momento(4, '17:20'), tempo: 3450, nota: 4,
     comentario: 'A estrutura mostrou que a consulta automática ajuda, mas não substitui experiência com aplicação das peças.',
     tarefas: [
       { texto: 'Identificar peça a partir do veículo e da necessidade informada', frequencia: 'Diária', criticidade: 'Alta', ferramenta: 'Catálogo eletrônico', efeito: 'P', origem: 'planilha' },
@@ -172,7 +184,7 @@ const funcoes: FuncaoSeed[] = [
     ],
   },
   {
-    id: 2007, empresa: 1004, nome: 'Auxiliar de estoque', origem: 'manual', criada: '2026-10-16T17:45:00.000Z', tempo: 1830, nota: 4,
+    id: 2007, empresa: 1004, nome: 'Auxiliar de estoque', origem: 'manual', criada: momento(8, '17:45'), tempo: 1830, nota: 4,
     comentario: 'As tarefas ficaram bem objetivas e foi rápido identificar as que podem ser automatizadas.',
     tarefas: [
       { texto: 'Receber e conferir mercadoria', frequencia: 'Diária', criticidade: 'Alta', ferramenta: 'Coletor e ERP', efeito: 'P' },
@@ -190,7 +202,7 @@ const funcoes: FuncaoSeed[] = [
     ocupantes: [{ id: 3011, apelido: 'Bruno', tempo: 690, prazo: 14, niveis: ['N2', 'N1', 'N1'], trilhas: 1 }],
   },
   {
-    id: 2008, empresa: 1005, nome: 'Atendente de loja', origem: 'texto', criada: '2026-10-14T15:55:00.000Z', tempo: 2250, nota: 5,
+    id: 2008, empresa: 1005, nome: 'Atendente de loja', origem: 'texto', criada: momento(6, '15:55'), tempo: 2250, nota: 5,
     comentario: 'A ferramenta ajudou a enxergar onde a recomendação de produto precisa continuar sendo validada pelo atendente.',
     tarefas: [
       { texto: 'Entender espécie, porte, idade e necessidade do animal', frequencia: 'Diária', criticidade: 'Alta', ferramenta: '', efeito: 'N', origem: 'manual' },
@@ -219,8 +231,10 @@ function niveisDaFuncao(f: FuncaoSeed, valores: Nivel[]): Niveis {
   return niveis;
 }
 
-export function semearBaseApresentacao(db: DatabaseSync): void {
+export function semearBaseApresentacao(db: DatabaseSync, data?: string): void {
   if (db.prepare('SELECT 1 FROM empresas WHERE id = ?').get(ID(1001))) return;
+  const inicio = inicioDaBase(data);
+  const iso = (offset: number): string => new Date(inicio + offset).toISOString();
 
   const inserirEmpresa = db.prepare('INSERT OR IGNORE INTO empresas (id, nome, cidade, segmento, ativa, criada_em) VALUES (?, ?, ?, ?, 1, ?)');
   const inserirUsuario = db.prepare(`INSERT OR IGNORE INTO usuarios
@@ -242,8 +256,8 @@ export function semearBaseApresentacao(db: DatabaseSync): void {
 
   transacao(db, () => {
     for (const e of empresas) {
-      inserirEmpresa.run(ID(e.id), e.nome, e.cidade, e.segmento, e.criada);
-      inserirUsuario.run(ID(e.id + 100), e.email, SENHA_HASH, ID(e.id), e.criada, e.acesso);
+      inserirEmpresa.run(ID(e.id), e.nome, e.cidade, e.segmento, iso(e.criada));
+      inserirUsuario.run(ID(e.id + 100), e.email, SENHA_HASH, ID(e.id), iso(e.criada), iso(e.acesso));
     }
 
     let ferramentaId = 5001;
@@ -254,21 +268,20 @@ export function semearBaseApresentacao(db: DatabaseSync): void {
       [1004, ['Busca inteligente de aplicações']],
       [1005, ['Recomendação de produtos por perfil']],
     ] as const) {
-      for (const nome of nomes) inserirFerramenta.run(ID(ferramentaId++), ID(empresa), nome, '2026-10-15T12:00:00.000Z');
+      for (const nome of nomes) inserirFerramenta.run(ID(ferramentaId++), ID(empresa), nome, iso(momento(7, '12:00')));
     }
 
     let execucaoId = 4001;
     for (const f of funcoes) {
       const estrutura = montarEstrutura(f);
-      inserirFuncao.run(ID(f.id), ID(f.empresa), f.nome, JSON.stringify(estrutura), f.origem, f.tempo, f.criada, f.criada);
-      inserirAvaliacao.run(ID(f.id), f.nota, f.comentario, new Date(Date.parse(f.criada) + 86_400_000).toISOString());
+      inserirFuncao.run(ID(f.id), ID(f.empresa), f.nome, JSON.stringify(estrutura), f.origem, f.tempo, iso(f.criada), iso(f.criada));
+      inserirAvaliacao.run(ID(f.id), f.nota, f.comentario, iso(f.criada + DIA_MS));
 
       f.ocupantes.forEach((o, indice) => {
-        const criado = new Date(Date.parse(f.criada) + (indice + 1) * 3_600_000).toISOString();
-        inserirOcupante.run(ID(o.id), ID(f.id), o.apelido, JSON.stringify(niveisDaFuncao(f, o.niveis)), o.prazo, o.tempo, criado, criado);
+        const criado = f.criada + (indice + 1) * 3_600_000;
+        inserirOcupante.run(ID(o.id), ID(f.id), o.apelido, JSON.stringify(niveisDaFuncao(f, o.niveis)), o.prazo, o.tempo, iso(criado), iso(criado));
         for (let t = 0; t < o.trilhas; t++) {
-          const data = new Date(Date.parse(criado) + (t + 1) * 86_400_000).toISOString();
-          inserirExecucao.run(ID(execucaoId++), ID(f.empresa), ID(f.id), ID(o.id), ID(f.empresa + 100), data);
+          inserirExecucao.run(ID(execucaoId++), ID(f.empresa), ID(f.id), ID(o.id), ID(f.empresa + 100), iso(criado + (t + 1) * DIA_MS));
         }
       });
     }

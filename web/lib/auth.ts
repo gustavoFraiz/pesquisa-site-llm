@@ -69,7 +69,12 @@ export function usuarioPorToken(db: DatabaseSync, token: string | undefined, ago
   const linha = db.prepare(`${SELECIONAR} JOIN auth_sessoes s ON s.usuario_id = u.id WHERE s.token_hash = ? AND s.expira > ?`)
     .get(hashToken(token), agora) as Linha | undefined;
   if (!linha || empresaBloqueada(linha)) return null;
-  return paraUsuario(linha);
+  // A loja escolhida na sessão substitui a loja própria do gestor; toda consulta filtra por esse empresaId.
+  const loja = db.prepare(`SELECT e.id, e.nome FROM sessao_loja s
+      JOIN gestor_lojas l ON l.empresa_id = s.empresa_id AND l.usuario_id = ?
+      JOIN empresas e ON e.id = s.empresa_id AND e.ativa = 1
+    WHERE s.token_hash = ?`).get(linha.id, hashToken(token)) as { id: string; nome: string } | undefined;
+  return { ...paraUsuario(linha), ...(loja && { empresaId: loja.id, empresaNome: loja.nome }) };
 }
 
 export function encerrarSessao(db: DatabaseSync, token: string | undefined): void {
