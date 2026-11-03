@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { definirSenha, inserirUsuario, normalizarEmail } from './auth.ts';
+import { definirSenha, hashToken, inserirUsuario, normalizarEmail } from './auth.ts';
 import { transacao } from './db.ts';
 import { HttpErro } from './http.ts';
 import { gerarSenhaTemporaria, hashSenha } from './senha.ts';
@@ -49,7 +49,8 @@ export function listarEmpresas(db: DatabaseSync): ResumoEmpresa[] {
       (SELECT COUNT(*) FROM ocupantes o JOIN funcoes f ON f.id = o.funcao_id
         WHERE f.empresa_id = e.id AND f.arquivada = 0 AND o.arquivado = 0) AS ocupantes,
       (SELECT COUNT(*) FROM execucoes x WHERE x.empresa_id = e.id AND x.tipo = 'trilha') AS trilhas
-    FROM empresas e LEFT JOIN usuarios u ON u.empresa_id = e.id AND u.papel = 'gestor'
+    FROM empresas e LEFT JOIN gestor_lojas l ON l.empresa_id = e.id
+      LEFT JOIN usuarios u ON u.papel = 'gestor' AND (u.empresa_id = e.id OR u.id = l.usuario_id)
     ORDER BY e.nome COLLATE NOCASE`).all() as LinhaEmpresa[];
   return linhas.map(l => ({
     id: l.id, nome: l.nome, cidade: l.cidade, segmento: l.segmento, ativa: Number(l.ativa) === 1, criadaEm: l.criada_em,
@@ -65,9 +66,41 @@ export function definirEmpresaAtiva(db: DatabaseSync, empresaId: string, ativa: 
 }
 
 export async function redefinirSenhaGestor(db: DatabaseSync, empresaId: string): Promise<string> {
-  const gestor = db.prepare("SELECT id FROM usuarios WHERE empresa_id = ? AND papel = 'gestor'").get(empresaId) as { id: string } | undefined;
+  const gestor = db.prepare(`SELECT id FROM usuarios WHERE papel = 'gestor'
+    AND (empresa_id = ? OR id = (SELECT usuario_id FROM gestor_lojas WHERE empresa_id = ?))`).get(empresaId, empresaId) as { id: string } | undefined;
   if (!gestor) throw new HttpErro(404, 'Empresa não encontrada.');
   const senha = gerarSenhaTemporaria();
   await definirSenha(db, gestor.id, senha, true);
   return senha;
+}
+
+export type LojaDoGestor = { id: string; nome: string; cidade: string; segmento: string };
+
+/** Lojas ativas do login: a loja própria, criada pelo admin, e as cadastradas pelo gestor. */
+export function listarLojasDoGestor(db: DatabaseSync, usuarioId: string): LojaDoGestor[] {
+  const linhas = db.prepare(`SELECT e.id, e.nome, e.cidade, e.segmento FROM empresas e
+    WHERE e.ativa = 1 AND (e.id = (SELECT empresa_id FROM usuarios WHERE id = ?)
+      OR e.id IN (SELECT empresa_id FROM gestor_lojas WHERE usuario_id = ?))
+    ORDER BY e.nome COLLATE NOCASE`).all(usuarioId, usuarioId) as LojaDoGestor[];
+  return linhas.map(l => ({ id: l.id, nome: l.nome, cidade: l.cidade, segmento: l.segmento }));
+}
+
+export function selecionarLoja(db: DatabaseSync, usuarioId: string, token: string, empresaId: string): void {
+  if (!listarLojasDoGestor(db, usuarioId).some(l => l.id === empresaId)) throw new HttpErro(404, 'Loja não encontrada.');
+  db.prepare('INSERT INTO sessao_loja (token_hash, empresa_id) VALUES (?, ?) ON CONFLICT (token_hash) DO UPDATE SET empresa_id = excluded.empresa_id')
+    .run(hashToken(token), empresaId);
+}
+
+export function criarLojaDoGestor(db: DatabaseSync, usuarioId: string, token: string, dados: Record<string, unknown>, agora = Date.now()): string {
+  const nome = obrigatorio(dados.nome, 'o nome da loja');
+  const cidade = opcional(dados.cidade, 'A cidade');
+  const segmento = opcional(dados.segmento, 'O segmento');
+  const empresaId = crypto.randomUUID();
+  const criadaEm = new Date(agora).toISOString();
+  transacao(db, () => {
+    db.prepare('INSERT INTO empresas (id, nome, cidade, segmento, ativa, criada_em) VALUES (?, ?, ?, ?, 1, ?)').run(empresaId, nome, cidade, segmento, criadaEm);
+    db.prepare('INSERT INTO gestor_lojas (empresa_id, usuario_id, criada_em) VALUES (?, ?, ?)').run(empresaId, usuarioId, criadaEm);
+    selecionarLoja(db, usuarioId, token, empresaId);
+  });
+  return empresaId;
 }

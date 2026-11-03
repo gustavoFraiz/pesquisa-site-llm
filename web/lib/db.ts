@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS auth_sessoes (
   token_hash TEXT PRIMARY KEY, usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   expira INTEGER NOT NULL, criada_em TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS auth_sessoes_usuario ON auth_sessoes(usuario_id);
+CREATE TABLE IF NOT EXISTS gestor_lojas (
+  empresa_id TEXT PRIMARY KEY REFERENCES empresas(id), usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, criada_em TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS gestor_lojas_usuario ON gestor_lojas(usuario_id);
+CREATE TABLE IF NOT EXISTS sessao_loja (
+  token_hash TEXT PRIMARY KEY REFERENCES auth_sessoes(token_hash) ON DELETE CASCADE, empresa_id TEXT NOT NULL REFERENCES empresas(id));
 CREATE TABLE IF NOT EXISTS catalogo_acoes (
   id TEXT PRIMARY KEY, empresa_id TEXT REFERENCES empresas(id), eixo TEXT NOT NULL, acao TEXT NOT NULL,
   recurso TEXT NOT NULL, custo TEXT NOT NULL, ativa INTEGER NOT NULL DEFAULT 1, criada_em TEXT NOT NULL);

@@ -4,7 +4,7 @@ Aplicação Next.js que usa o motor Python na pasta superior. O admin (equipe da
 
 ## Contas e dados
 
-- Login obrigatório. Um gestor por empresa; a senha temporária criada pelo admin é trocada no primeiro acesso. O primeiro admin é criado por SSH com `node scripts/criar-admin.mjs <email>`.
+- Login obrigatório. Cada empresa tem um gestor, e um gestor pode cadastrar e alternar várias lojas com o mesmo login (`/lojas`); a senha temporária criada pelo admin é trocada no primeiro acesso. O primeiro admin é criado por SSH com `node scripts/criar-admin.mjs <email>`. Para criar um gestor pelo terminal, com a senha já definitiva, use `node scripts/criar-gestor.mjs <email> "<loja>" [cidade] [segmento]`.
 - Senhas com `scrypt` (N=2¹⁷). Sessão em cookie `mrcc_auth` (`HttpOnly`, `SameSite=Lax`, `Secure` com `MRCC_SECURE_COOKIE=1`), 14 dias; o banco guarda só o hash do token. Cinco senhas erradas bloqueiam a conta por 15 minutos.
 - Toda consulta do gestor é filtrada pela empresa da sessão; recurso de outra empresa responde 404. O admin só lê os dados das empresas.
 - SQLite (`node:sqlite`, WAL) em `web/data/sessions.sqlite`, com tabelas só aditivas: o rollback do deploy volta o código sem quebrar o banco. Cada execução guarda entradas, diagnóstico, propostas e evidências em `web/data/<id>/`.
